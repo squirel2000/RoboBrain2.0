@@ -24,22 +24,25 @@ class SimpleInference:
 
         self.processor = AutoProcessor.from_pretrained(model_id)
         
-    def inference(self, text:str, image: Union[list,str], task="general", plot=False, enable_thinking=True, do_sample=True, temperature=0.7):
-        """Perform inference with text and images input.
+    def inference(self, text:str, image: Union[list,str] = None, task="general", plot=False, enable_thinking=True, do_sample=True, temperature=0.7):
+        """Perform inference with text and optional images input.
         Args:
             text (str): The input text prompt.
-            image (Union[list,str]): The input image(s) as a list of file paths or a single file path.
+            image (Union[list,str], optional): The input image(s) as a list of file paths or a single file path. Defaults to None.
             task (str): The task type, e.g., "general", "pointing", "affordance", "trajectory". If "pointing", "affordance", or "trajectory" is specified, the function will automatically adjust the text prompt.
             enable_thinking (bool): Whether to enable thinking mode.
             do_sample (bool): Whether to use sampling during generation.
             temperature (float): Temperature for sampling.
         """
 
-        if isinstance(image, str):
+        if image and isinstance(image, str):
             image = [image]
 
         assert task in ["general", "pointing", "affordance", "trajectory", "grounding"], f"Invalid task type: {task}. Supported tasks are 'general', 'pointing', 'affordance', 'trajectory', 'grounding'."
-        assert task == "general" or (task in ["pointing", "affordance", "trajectory", "grounding"] and len(image) == 1), "Pointing, affordance, grounding, and trajectory tasks require exactly one image."
+        if image:
+            assert task == "general" or (task in ["pointing", "affordance", "trajectory", "grounding"] and len(image) == 1), "Pointing, affordance, grounding, and trajectory tasks require exactly one image."
+        elif task != "general":
+            raise ValueError("Tasks other than 'general' require an image.")
 
         if task == "pointing":
             print("Pointing task detected. We automatically add a pointing prompt for inference.")
@@ -56,17 +59,18 @@ class SimpleInference:
 
         print(F"##### INPUT #####\n{text}\n###############")
 
+        content = []
+        if image:
+            content.extend([
+                {"type": "image", "image": path if path.startswith("http") else f"file://{path}"}
+                for path in image
+            ])
+        content.append({"type": "text", "text": f"{text}"})
+
         messages = [
             {
                 "role": "user",
-                "content": [
-                    *[
-                        {"type": "image", 
-                         "image": path if path.startswith("http") else f"file://{path}"
-                        } for path in image
-                    ],
-                    {"type": "text", "text": f"{text}"},
-                ],
+                "content": content,
             },
         ]
 
@@ -109,7 +113,7 @@ class SimpleInference:
             thinking_text = ""
             answer_text = output_text[0].replace("<answer>", "").replace("</answer>", "").strip()
 
-        if plot and task in ["pointing", "affordance", "trajectory", "grounding"]:
+        if plot and image and task in ["pointing", "affordance", "trajectory", "grounding"]:
             print("Plotting enabled. Drawing results on the image ...")
             # extract points, boxes, or trajectories based on the task
 
@@ -221,8 +225,9 @@ if __name__ == "__main__":
 
     model = SimpleInference("BAAI/RoboBrain2.0-7B")
 
-    prompt = "What is shown in this image?"
-    image = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    prompt = "the person wearing a red hat"
+    # image = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = "./assets/demo/grounding.jpg"
 
-    pred = model.inference(prompt, image, task="general", plot=False, enable_thinking=True, do_sample=True)
+    pred = model.inference(prompt, image, task="grounding", plot=True, enable_thinking=True, do_sample=True)
     print(f"Prediction:\n{pred}")
