@@ -13,7 +13,7 @@ from inference import SimpleInference
 # --- Data Models for OpenAI Compatibility ---
 class Message(BaseModel):
     role: str
-    content: str
+    content: Any  # Allow content to be a string or a list
 
 class ChatCompletionRequest(BaseModel):
     model: str
@@ -57,18 +57,14 @@ async def create_chat_completion(request: ChatCompletionRequest):
     if not request.messages:
         return JSONResponse(status_code=400, content={"error": "messages list is empty"})
 
-    # Extract the text prompt from the last message.
-    # Note: RoboBrain 2.0's SimpleInference takes a simple string, not a list of messages.
-    # We'll pass the content of the last user message as the prompt.
-    user_prompt = request.messages[-1].content
+    last_message = request.messages[-1]
+    if isinstance(last_message.content, list):
+        # Handle the case where content is a list of dictionaries
+        user_prompt = "".join(item.get('text', '') for item in last_message.content if item.get('type') == 'text')
+    else:
+        # Handle the case where content is a simple string
+        user_prompt = last_message.content
 
-    # For this scenario, we assume no images are being passed through the API.
-    # The SimpleInference class requires an image, so we'll need to handle this.
-    # Let's provide a placeholder or modify the inference logic if possible.
-    # For now, we'll assume the text-only part of the brain is what we need.
-    # A proper implementation would require modifying SimpleInference to handle text-only prompts.
-    # Let's make a small adjustment here for text-only input.
-    
     print(f"Received prompt for model: {user_prompt}")
 
     # --- Real Inference Call ---
